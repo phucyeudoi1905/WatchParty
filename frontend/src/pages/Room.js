@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactPlayer from 'react-player';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -8,86 +9,114 @@ const Room = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, isConnected, joinRoom, leaveRoom, sendMessage: sendSocketMessage, onEvent, sendVideoControl } = useSocket();
   
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [usersInRoom, setUsersInRoom] = useState([]);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   
   const videoRef = useRef(null);
+  const playerRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !isConnected) return;
 
-    // Tham gia phòng
-    socket.emit('join-room', {
-      roomId,
-      userId: user._id,
-      username: user.username
+    joinRoom(roomId);
+
+    const offChat = onEvent('chat-message', (data) => {
+      setMessages(prev => [...prev, {
+        userId: data.userId,
+        username: data.username,
+        content: data.message,
+        timestamp: data.timestamp
+      }]);
     });
 
-    // Lắng nghe tin nhắn mới
-    socket.on('new-message', (message) => {
-      setMessages(prev => [...prev, message]);
-    });
-
-    // Lắng nghe người dùng tham gia
-    socket.on('user-joined', (userData) => {
+    const offJoined = onEvent('user-joined', (userData) => {
       toast.success(`${userData.username} đã tham gia phòng`);
     });
 
-    // Lắng nghe danh sách người dùng trong phòng
-    socket.on('room-users', (users) => {
+    const offUsers = onEvent('room-users', (users) => {
       setUsersInRoom(users);
     });
 
+    const offVideo = onEvent('video-control', (data) => {
+      const { action, time } = data;
+      const isYouTube = (room?.videoType || '').toLowerCase() === 'youtube' || (room?.videoUrl || '').includes('youtu');
+
+      if (isYouTube) {
+        const player = playerRef.current;
+        if (!player) return;
+        if (typeof time === 'number' && !Number.isNaN(time)) {
+          try { player.seekTo(time, 'seconds'); } catch (_) {}
+        }
+        if (action === 'play') {
+          setIsPlaying(true);
+        } else if (action === 'pause') {
+          setIsPlaying(false);
+        }
+      } else {
+        const video = videoRef.current;
+        if (!video) return;
+        if (typeof time === 'number' && !Number.isNaN(time)) {
+          const drift = Math.abs(video.currentTime - time);
+          if (drift > 0.3) {
+            video.currentTime = time;
+          }
+        }
+        if (action === 'play') {
+          video.play().catch(() => {});
+        } else if (action === 'pause') {
+          video.pause();
+        } else if (action === 'seek') {
+          if (typeof time === 'number') {
+            video.currentTime = time;
+          }
+        }
+      }
+    });
+
     // Lấy thông tin phòng
-    fetchRoomInfo();
+    (async () => {
+      try {
+        const response = await fetch(`/api/rooms/${roomId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const roomData = await response.json();
+          setRoom(roomData.room || roomData);
+        } else {
+          toast.error('Không thể tải thông tin phòng');
+          navigate('/dashboard');
+        }
+      } catch (error) {
+        console.error('Lỗi khi tải thông tin phòng:', error);
+        toast.error('Lỗi kết nối');
+      }
+    })();
 
     return () => {
-      socket.emit('leave-room', { roomId, userId: user._id });
-      socket.off('new-message');
-      socket.off('user-joined');
-      socket.off('room-users');
+      leaveRoom(roomId);
+      offChat && offChat();
+      offJoined && offJoined();
+      offUsers && offUsers();
+      offVideo && offVideo();
     };
-  }, [socket, roomId, user]);
-
-  const fetchRoomInfo = async () => {
-    try {
-      const response = await fetch(`/api/rooms/${roomId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (response.ok) {
-        const roomData = await response.json();
-        setRoom(roomData);
-      } else {
-        toast.error('Không thể tải thông tin phòng');
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      console.error('Lỗi khi tải thông tin phòng:', error);
-      toast.error('Lỗi kết nối');
-    }
-  };
+  }, [socket, isConnected, roomId, user, joinRoom, leaveRoom, onEvent, navigate]);
+  
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
 
-    const messageData = {
-      roomId,
-      content: newMessage,
-      userId: user._id,
-      username: user.username
-    };
-
-    socket.emit('send-message', messageData);
+    sendSocketMessage(roomId, newMessage);
     setNewMessage('');
   };
 
@@ -101,8 +130,8 @@ const Room = () => {
     // Implement audio toggle logic here
   };
 
-  const leaveRoom = () => {
-    socket.emit('leave-room', { roomId, userId: user._id });
+  const handleLeaveRoom = () => {
+    leaveRoom(roomId);
     navigate('/dashboard');
   };
 
@@ -111,6 +140,44 @@ const Room = () => {
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  // Gửi sự kiện điều khiển video khi local video thay đổi (HTML5 video)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !socket || !isConnected) return;
+
+    const handlePlay = () => sendVideoControl(roomId, 'play', video.currentTime);
+    const handlePause = () => sendVideoControl(roomId, 'pause', video.currentTime);
+    const handleSeeked = () => sendVideoControl(roomId, 'seek', video.currentTime);
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeked', handleSeeked);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeked', handleSeeked);
+    };
+  }, [socket, isConnected, roomId, sendVideoControl, room?.videoType, room?.videoUrl]);
+
+  const handleReactPlayerPlay = () => {
+    const player = playerRef.current;
+    const current = player?.getCurrentTime ? player.getCurrentTime() : 0;
+    setIsPlaying(true);
+    sendVideoControl(roomId, 'play', current || 0);
+  };
+
+  const handleReactPlayerPause = () => {
+    const player = playerRef.current;
+    const current = player?.getCurrentTime ? player.getCurrentTime() : 0;
+    setIsPlaying(false);
+    sendVideoControl(roomId, 'pause', current || 0);
+  };
+
+  const handleReactPlayerSeek = (seconds) => {
+    sendVideoControl(roomId, 'seek', seconds || 0);
+  };
 
   if (!room) {
     return (
@@ -152,7 +219,7 @@ const Room = () => {
                 {isAudioEnabled ? 'Tắt Âm thanh' : 'Bật Âm thanh'}
               </button>
               <button
-                onClick={leaveRoom}
+                onClick={handleLeaveRoom}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Rời phòng
@@ -168,12 +235,34 @@ const Room = () => {
           <div className="lg:col-span-2">
             <div className="bg-black rounded-lg aspect-video flex items-center justify-center">
               {isVideoEnabled ? (
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover rounded-lg"
-                  autoPlay
-                  muted
-                />
+                (() => {
+                  const isYouTube = (room?.videoType || '').toLowerCase() === 'youtube' || (room?.videoUrl || '').includes('youtu');
+                  if (isYouTube) {
+                    return (
+                      <ReactPlayer
+                        ref={playerRef}
+                        url={room?.videoUrl}
+                        width="100%"
+                        height="100%"
+                        playing={isPlaying}
+                        controls
+                        onPlay={handleReactPlayerPlay}
+                        onPause={handleReactPlayerPause}
+                        onSeek={handleReactPlayerSeek}
+                      />
+                    );
+                  }
+                  return (
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-cover rounded-lg"
+                      autoPlay
+                      muted={!isAudioEnabled}
+                      controls
+                      src={room?.videoUrl || ''}
+                    />
+                  );
+                })()
               ) : (
                 <div className="text-white text-center">
                   <div className="text-6xl mb-4">📹</div>

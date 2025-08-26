@@ -9,7 +9,8 @@ const messageSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'User ID là bắt buộc']
+    // Với messageType 'system' thì không yêu cầu userId
+    required: [function() { return this.messageType !== 'system'; }, 'User ID là bắt buộc']
   },
   username: {
     type: String,

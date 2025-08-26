@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// Lưu ý: KHÔNG hash thủ công ở đây. Dùng virtual 'password' của model để hash tự động
+// const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // Import User model
@@ -30,6 +31,30 @@ const sampleUsers = [
     isVerified: true,
     avatar: null,
     createdAt: new Date()
+  },
+  {
+    username: 'charlie_view',
+    email: 'charlie@watchparty.com',
+    password: 'Charlie789!',
+    isVerified: true,
+    avatar: null,
+    createdAt: new Date()
+  },
+  {
+    username: 'diana_party',
+    email: 'diana@watchparty.com',
+    password: 'Diana321!',
+    isVerified: true,
+    avatar: null,
+    createdAt: new Date()
+  },
+  {
+    username: 'eric_sync',
+    email: 'eric@watchparty.com',
+    password: 'Eric654!',
+    isVerified: true,
+    avatar: null,
+    createdAt: new Date()
   }
 ];
 
@@ -43,26 +68,28 @@ async function createSampleUsers() {
       const existingUser = await User.findOne({
         $or: [{ username: userData.username }, { email: userData.email }]
       });
-      
+
       if (existingUser) {
-        console.log(`⚠️ Tài khoản ${userData.username} đã tồn tại, bỏ qua`);
+        // Cập nhật mật khẩu đúng cách bằng virtual để sửa trường hợp đã bị double-hash
+        existingUser.password = userData.password; // virtual sẽ set passwordHash chuẩn
+        existingUser.isVerified = true;
+        existingUser.isActive = true;
+        await existingUser.save();
+        console.log(`🔄 Đã cập nhật mật khẩu cho: ${userData.username}`);
         continue;
       }
-      
-      // Hash password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(userData.password, saltRounds);
-      
-      // Tạo user mới
+
+      // Tạo user mới (để virtual 'password' hash tự động)
       const newUser = new User({
         username: userData.username,
         email: userData.email,
-        password: hashedPassword,
+        password: userData.password, // đặt plaintext, virtual sẽ hash
         isVerified: userData.isVerified,
+        isActive: true,
         avatar: userData.avatar,
         createdAt: userData.createdAt
       });
-      
+
       await newUser.save();
       console.log(`✅ Đã tạo tài khoản: ${userData.username} (${userData.email})`);
     }

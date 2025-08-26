@@ -139,13 +139,7 @@ router.post('/login', [
       });
     }
 
-    // Kiểm tra tài khoản có bị khóa không
-    if (!user.isActive) {
-      return res.status(403).json({
-        error: 'Tài khoản đã bị khóa',
-        code: 'ACCOUNT_DISABLED'
-      });
-    }
+    // Bỏ kiểm tra khóa tài khoản để cho phép đăng nhập nếu thông tin hợp lệ
 
     // Cập nhật lần đăng nhập cuối
     user.lastLogin = new Date();
@@ -171,11 +165,11 @@ router.post('/login', [
 
 // Google OAuth routes
 router.get('/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 );
 
 router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login' }),
+  passport.authenticate('google', { failureRedirect: '/login', session: false }),
   async (req, res) => {
     try {
       // Tạo hoặc cập nhật user

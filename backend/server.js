@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // Debug: Kiểm tra biến môi trường
@@ -17,6 +18,7 @@ const roomRoutes = require('./routes/rooms');
 const messageRoutes = require('./routes/messages');
 const { authenticateToken } = require('./middleware/auth');
 const passport = require('./config/passport');
+const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
@@ -46,7 +48,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // Passport middleware
 app.use(passport.initialize());
-app.use(passport.session());
 
 // Database connection
 if (!process.env.MONGODB_URI) {
@@ -75,13 +76,41 @@ app.get('/health', (req, res) => {
 const connectedUsers = new Map(); // userId -> socketId
 const roomUsers = new Map(); // roomId -> Set of userIds
 
+// Authenticate socket handshake using JWT
+io.use(async (socket, next) => {
+  try {
+    const authToken = socket.handshake.auth && socket.handshake.auth.token
+      ? socket.handshake.auth.token
+      : (socket.handshake.headers && socket.handshake.headers.authorization
+        ? socket.handshake.headers.authorization.split(' ')[1]
+        : null);
+
+    if (!authToken) {
+      return next(new Error('Unauthorized'));
+    }
+
+    const decoded = jwt.verify(authToken, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select('username email');
+    if (!user) {
+      return next(new Error('Unauthorized'));
+    }
+
+    socket.user = { _id: user._id.toString(), username: user.username };
+    next();
+  } catch (err) {
+    next(new Error('Unauthorized'));
+  }
+});
+
 io.on('connection', (socket) => {
   console.log(`🔌 Người dùng kết nối: ${socket.id}`);
 
   // Người dùng tham gia phòng
   socket.on('join-room', async (data) => {
     try {
-      const { roomId, userId, username } = data;
+      const { roomId } = data;
+      const userId = socket.user?._id;
+      const username = socket.user?.username;
       
       // Thêm người dùng vào phòng
       if (!roomUsers.has(roomId)) {
@@ -108,7 +137,9 @@ io.on('connection', (socket) => {
 
   // Người dùng rời phòng
   socket.on('leave-room', (data) => {
-    const { roomId, userId, username } = data;
+    const { roomId } = data;
+    const userId = socket.user?._id;
+    const username = socket.user?.username;
     
     if (roomUsers.has(roomId)) {
       roomUsers.get(roomId).delete(userId);
@@ -126,7 +157,8 @@ io.on('connection', (socket) => {
 
   // Điều khiển video
   socket.on('video-control', (data) => {
-    const { roomId, action, time, userId } = data;
+    const { roomId, action, time } = data;
+    const userId = socket.user?._id;
     
     // Gửi điều khiển video cho tất cả trong phòng (trừ người gửi)
     socket.to(roomId).emit('video-control', { action, time, userId });
@@ -135,7 +167,9 @@ io.on('connection', (socket) => {
 
   // Tin nhắn chat
   socket.on('chat-message', (data) => {
-    const { roomId, message, userId, username } = data;
+    const { roomId, message } = data;
+    const userId = socket.user?._id;
+    const username = socket.user?.username;
     
     // Gửi tin nhắn cho tất cả trong phòng
     io.to(roomId).emit('chat-message', { message, userId, username, timestamp: new Date() });

@@ -9,7 +9,8 @@ import {
   Clock, 
   Eye,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -45,6 +46,17 @@ const Dashboard = () => {
       setTimeout(() => setCopiedRoomCode(null), 2000);
     } catch (error) {
       toast.error('Không thể sao chép mã phòng');
+    }
+  };
+
+  const deleteRoom = async (roomId) => {
+    if (!window.confirm('Bạn có chắc muốn xóa phòng này?')) return;
+    try {
+      await axios.delete(`/api/rooms/${roomId}`);
+      toast.success('Đã xóa phòng!');
+      setRooms(rooms.filter(room => room.id !== roomId));
+    } catch (error) {
+      toast.error('Không thể xóa phòng');
     }
   };
 
@@ -233,6 +245,15 @@ const Dashboard = () => {
                       >
                         Tham gia
                       </Link>
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => deleteRoom(room.id)}
+                        className="btn-danger flex items-center space-x-1 px-3 py-2 rounded"
+                        title="Xóa phòng"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Xóa</span>
+                      </button>
                     </div>
                   </div>
                 </div>

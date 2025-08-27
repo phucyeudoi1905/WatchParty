@@ -75,9 +75,9 @@ const requireAdmin = (req, res, next) => {
 // Middleware kiểm tra quyền host của phòng
 const requireHost = async (req, res, next) => {
   try {
-    const { roomId } = req.params;
+    // Sử dụng id thay vì roomId để đồng bộ với route
+    const roomId = req.params.id || req.params.roomId;
     const Room = require('../models/Room');
-    
     const room = await Room.findById(roomId);
     if (!room) {
       return res.status(404).json({ 
@@ -85,17 +85,14 @@ const requireHost = async (req, res, next) => {
         code: 'ROOM_NOT_FOUND'
       });
     }
-    
     if (room.hostId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ 
         error: 'Chỉ host mới có quyền thực hiện hành động này',
         code: 'HOST_REQUIRED'
       });
     }
-    
     req.room = room;
     next();
-    
   } catch (error) {
     console.error('Lỗi kiểm tra quyền host:', error);
     return res.status(500).json({ 

@@ -402,19 +402,13 @@ router.put('/:id', requireHost, [
 // Xóa phòng (chỉ host)
 router.delete('/:id', requireHost, async (req, res) => {
   try {
-    const room = req.room;
-    
-    // Xóa tất cả tin nhắn của phòng
-    await Message.deleteMany({ roomId: room._id });
-    
-    // Xóa phòng
-    await Room.findByIdAndDelete(room._id);
-    
-    res.json({
-      message: 'Xóa phòng thành công'
-    });
-
-  } catch (error) {
+      const room = req.room;
+      await Message.deleteMany({ roomId: room._id });
+      await Room.findByIdAndDelete(room._id);
+      res.json({
+        message: 'Xóa phòng thành công'
+     });
+    } catch (error) {
     console.error('Lỗi xóa phòng:', error);
     res.status(500).json({
       error: 'Lỗi xóa phòng',

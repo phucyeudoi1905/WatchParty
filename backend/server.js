@@ -165,6 +165,25 @@ io.on('connection', (socket) => {
     console.log(`🎮 Video control: ${action} at ${time}s in room ${roomId}`);
   });
 
+  // Client mới yêu cầu trạng thái đồng bộ từ phòng
+  socket.on('request-sync', (data) => {
+    const { roomId } = data || {};
+    const userId = socket.user?._id;
+    if (!roomId) return;
+    // Phát yêu cầu tới phòng để một client đang xem gửi lại trạng thái
+    socket.to(roomId).emit('request-sync', { requesterId: userId });
+  });
+
+  // Một client gửi trạng thái hiện tại của video cho người yêu cầu
+  socket.on('sync-state', (data) => {
+    const { roomId, targetUserId, time, isPlaying } = data || {};
+    if (!roomId || !targetUserId) return;
+    const targetSocketId = connectedUsers.get(targetUserId);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('sync-state', { time, isPlaying });
+    }
+  });
+
   // Tin nhắn chat
   socket.on('chat-message', (data) => {
     const { roomId, message } = data;

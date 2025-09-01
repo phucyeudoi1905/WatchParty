@@ -121,6 +121,20 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  // Yêu cầu đồng bộ trạng thái khi mới vào phòng
+  const requestSync = (roomId) => {
+    if (socket && isConnected) {
+      socket.emit('request-sync', { roomId });
+    }
+  };
+
+  // Gửi trạng thái hiện tại của video cho 1 người dùng cụ thể
+  const sendSyncState = (roomId, targetUserId, time, isPlaying) => {
+    if (socket && isConnected) {
+      socket.emit('sync-state', { roomId, targetUserId, time, isPlaying });
+    }
+  };
+
   // Hàm lắng nghe sự kiện
   const onEvent = (event, callback) => {
     if (socket) {
@@ -145,6 +159,8 @@ export const SocketProvider = ({ children }) => {
     leaveRoom,
     sendMessage,
     sendVideoControl,
+    requestSync,
+    sendSyncState,
     onEvent,
     offEvent
   };

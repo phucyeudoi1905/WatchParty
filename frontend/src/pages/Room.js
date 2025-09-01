@@ -9,7 +9,7 @@ const Room = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { socket, isConnected, joinRoom, leaveRoom, sendMessage: sendSocketMessage, onEvent, sendVideoControl } = useSocket();
+  const { socket, isConnected, joinRoom, leaveRoom, sendMessage: sendSocketMessage, onEvent, sendVideoControl, requestSync, sendSyncState } = useSocket();
   
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -21,6 +21,7 @@ const Room = () => {
   
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const applyingRemoteRef = useRef(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -47,11 +48,12 @@ const Room = () => {
 
     const offVideo = onEvent('video-control', (data) => {
       const { action, time } = data;
-      const isYouTube = (room?.videoType || '').toLowerCase() === 'youtube' || (room?.videoUrl || '').includes('youtu');
+      const player = playerRef.current;
+      const video = videoRef.current;
 
-      if (isYouTube) {
-        const player = playerRef.current;
-        if (!player) return;
+      // Ưu tiên đồng bộ theo player hiện có
+      if (player) {
+        applyingRemoteRef.current = true;
         if (typeof time === 'number' && !Number.isNaN(time)) {
           try { player.seekTo(time, 'seconds'); } catch (_) {}
         }
@@ -60,9 +62,9 @@ const Room = () => {
         } else if (action === 'pause') {
           setIsPlaying(false);
         }
-      } else {
-        const video = videoRef.current;
-        if (!video) return;
+        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
+      } else if (video) {
+        applyingRemoteRef.current = true;
         if (typeof time === 'number' && !Number.isNaN(time)) {
           const drift = Math.abs(video.currentTime - time);
           if (drift > 0.3) {
@@ -78,8 +80,47 @@ const Room = () => {
             video.currentTime = time;
           }
         }
+        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
       }
     });
+
+    // Nhận trạng thái đồng bộ
+    const offSyncState = onEvent('sync-state', ({ time, isPlaying: remotePlaying }) => {
+      const player = playerRef.current;
+      const video = videoRef.current;
+      if (player) {
+        applyingRemoteRef.current = true;
+        try { player.seekTo((time ?? 0), 'seconds'); } catch (_) {}
+        setIsPlaying(!!remotePlaying);
+        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
+      } else if (video) {
+        applyingRemoteRef.current = true;
+        if (typeof time === 'number' && !Number.isNaN(time)) {
+          video.currentTime = time;
+        }
+        if (remotePlaying) {
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
+      }
+    });
+
+    // Khi có yêu cầu đồng bộ từ người khác, gửi trạng thái hiện tại
+    const offRequestSync = onEvent('request-sync', ({ requesterId }) => {
+      const player = playerRef.current;
+      const video = videoRef.current;
+      if (player) {
+        const current = player?.getCurrentTime ? player.getCurrentTime() : 0;
+        sendSyncState(roomId, requesterId, current || 0, isPlaying);
+      } else if (video) {
+        sendSyncState(roomId, requesterId, video.currentTime || 0, !video.paused);
+      }
+    });
+
+    // Yêu cầu đồng bộ sau khi đã đăng ký listener
+    requestSync(roomId);
 
     // Lấy thông tin phòng
     (async () => {
@@ -109,8 +150,10 @@ const Room = () => {
       offJoined && offJoined();
       offUsers && offUsers();
       offVideo && offVideo();
+      offSyncState && offSyncState();
+      offRequestSync && offRequestSync();
     };
-  }, [socket, isConnected, roomId, user, joinRoom, leaveRoom, onEvent, navigate]);
+  }, [socket, isConnected, roomId, user, joinRoom, leaveRoom, onEvent, navigate, requestSync, sendSyncState, isPlaying]);
   
 
   const sendMessage = () => {
@@ -146,9 +189,9 @@ const Room = () => {
     const video = videoRef.current;
     if (!video || !socket || !isConnected) return;
 
-    const handlePlay = () => sendVideoControl(roomId, 'play', video.currentTime);
-    const handlePause = () => sendVideoControl(roomId, 'pause', video.currentTime);
-    const handleSeeked = () => sendVideoControl(roomId, 'seek', video.currentTime);
+    const handlePlay = () => { if (!applyingRemoteRef.current) sendVideoControl(roomId, 'play', video.currentTime); };
+    const handlePause = () => { if (!applyingRemoteRef.current) sendVideoControl(roomId, 'pause', video.currentTime); };
+    const handleSeeked = () => { if (!applyingRemoteRef.current) sendVideoControl(roomId, 'seek', video.currentTime); };
 
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
@@ -165,18 +208,24 @@ const Room = () => {
     const player = playerRef.current;
     const current = player?.getCurrentTime ? player.getCurrentTime() : 0;
     setIsPlaying(true);
-    sendVideoControl(roomId, 'play', current || 0);
+    if (!applyingRemoteRef.current) {
+      sendVideoControl(roomId, 'play', current || 0);
+    }
   };
 
   const handleReactPlayerPause = () => {
     const player = playerRef.current;
     const current = player?.getCurrentTime ? player.getCurrentTime() : 0;
     setIsPlaying(false);
-    sendVideoControl(roomId, 'pause', current || 0);
+    if (!applyingRemoteRef.current) {
+      sendVideoControl(roomId, 'pause', current || 0);
+    }
   };
 
   const handleReactPlayerSeek = (seconds) => {
-    sendVideoControl(roomId, 'seek', seconds || 0);
+    if (!applyingRemoteRef.current) {
+      sendVideoControl(roomId, 'seek', seconds || 0);
+    }
   };
 
   if (!room) {

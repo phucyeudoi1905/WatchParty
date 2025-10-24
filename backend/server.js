@@ -25,8 +25,12 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowedHeaders: ["Authorization", "Content-Type"]
+  },
+  allowEIO3: true,
+  transports: ['websocket', 'polling']
 });
 
 // Middleware
@@ -36,10 +40,15 @@ app.use(cors({
   credentials: true
 }));
 
+// Trust proxy for rate limiting
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
@@ -79,6 +88,8 @@ const roomUsers = new Map(); // roomId -> Set of userIds
 // Authenticate socket handshake using JWT
 io.use(async (socket, next) => {
   try {
+    console.log('🔐 Authenticating socket connection...');
+    
     const authToken = socket.handshake.auth && socket.handshake.auth.token
       ? socket.handshake.auth.token
       : (socket.handshake.headers && socket.handshake.headers.authorization
@@ -86,19 +97,23 @@ io.use(async (socket, next) => {
         : null);
 
     if (!authToken) {
-      return next(new Error('Unauthorized'));
+      console.log('❌ No auth token provided');
+      return next(new Error('No auth token provided'));
     }
 
     const decoded = jwt.verify(authToken, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId).select('username email');
     if (!user) {
-      return next(new Error('Unauthorized'));
+      console.log('❌ User not found');
+      return next(new Error('User not found'));
     }
 
     socket.user = { _id: user._id.toString(), username: user.username };
+    console.log('✅ Socket authenticated for user:', user.username);
     next();
   } catch (err) {
-    next(new Error('Unauthorized'));
+    console.error('❌ Socket authentication error:', err.message);
+    next(new Error('Authentication failed: ' + err.message));
   }
 });
 

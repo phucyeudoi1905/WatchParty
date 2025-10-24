@@ -1,0 +1,69 @@
+THÔNG TIN GITHUB DỰ ÁN WATCH PARTY
+=====================================
+
+Tên dự án: Watch Party - Nền tảng xem phim cùng nhau
+Mô tả: Ứng dụng web cho phép người dùng xem phim đồng bộ với nhau trong thời gian thực
+
+THÔNG TIN REPOSITORY:
+- Repository URL: https://github.com/[username]/watch-party
+- Branch chính: main
+- Ngôn ngữ chính: JavaScript, HTML, CSS
+- Framework: React.js (Frontend), Node.js + Express (Backend)
+
+CẤU TRÚC DỰ ÁN:
+├── backend/              # Server Node.js + Express
+│   ├── config/           # Cấu hình Passport
+│   ├── middleware/       # Middleware xác thực
+│   ├── models/           # Models MongoDB
+│   ├── routes/           # API Routes
+│   └── server.js         # Server chính
+├── frontend/             # Client React.js
+│   ├── public/           # Static files
+│   ├── src/              # Source code React
+│   │   ├── components/   # React components
+│   │   ├── contexts/     # React contexts
+│   │   └── pages/        # React pages
+│   └── package.json      # Dependencies frontend
+├── Database/             # Database scripts
+│   ├── init-database.js  # Script khởi tạo DB
+│   ├── backup-database.js # Script backup
+│   └── restore-database.js # Script restore
+└── thuc_thi/            # Files tự chạy
+    ├── start-watchparty.bat  # Script Windows
+    ├── start-watchparty.sh   # Script Linux/Mac
+    └── ...
+
+TÍNH NĂNG CHÍNH:
+- 🎬 Xem video đồng bộ với nhóm
+- 💬 Chat realtime trong phòng
+- 🔐 Xác thực người dùng (JWT + Google OAuth)
+- 👥 Quản lý phòng và thành viên
+- 🎮 Điều khiển video tập trung
+
+CÔNG NGHỆ SỬ DỤNG:
+- Frontend: React.js, TailwindCSS, Socket.io Client
+- Backend: Node.js, Express.js, Socket.io, MongoDB
+- Database: MongoDB với Mongoose ODM
+- Authentication: JWT, Passport.js, Google OAuth
+- Real-time: Socket.io
+
+CÁCH CHẠY DỰ ÁN:
+1. Clone repository
+2. Cài đặt dependencies cho backend và frontend
+3. Cấu hình file .env
+4. Chạy MongoDB
+5. Sử dụng script trong thư mục thuc_thi/ để khởi động
+
+COMMITS CHÍNH:
+- Initial commit: Tạo cấu trúc dự án cơ bản
+- Backend setup: Thiết lập server Express + Socket.io
+- Frontend setup: Thiết lập React app với routing
+- Authentication: Implement JWT và Google OAuth
+- Real-time features: Socket.io cho chat và video sync
+- Database scripts: Thêm scripts quản lý database
+- Executable files: Tạo files tự chạy cho deployment
+
+LICENSE: MIT License
+Tác giả: [Tên sinh viên]
+Ngày tạo: [Ngày tạo dự án]
+Cập nhật lần cuối: [Ngày cập nhật]

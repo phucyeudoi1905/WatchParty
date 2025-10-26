@@ -5,8 +5,10 @@ Tên dự án: Watch Party - Nền tảng xem phim cùng nhau
 Mô tả: Ứng dụng web cho phép người dùng xem phim đồng bộ với nhau trong thời gian thực
 
 THÔNG TIN REPOSITORY:
-- Repository URL: https://github.com/Ziinpv/2212407_HoangLong_WatchParty_MTK
-- Sinh viên thực hiện:Hoàng Long- 221240
+- Repository URL: https://github.com/phucyeudoi1905/WatchParty
+- Sinh viên thực hiện: Nguyễn Thị Hoàng Phúc- 2213795
+                       Hoàng Long- 2212407
+                       Nguyễn Hoàng Sang- 2212451     
 - Branch chính: main
 - Ngôn ngữ chính: JavaScript, HTML, CSS
 - Framework: React.js (Frontend), Node.js + Express (Backend)
@@ -65,3 +67,6 @@ COMMITS CHÍNH:
 - Executable files: Tạo files tự chạy cho deployment
 
 LICENSE: MIT License
+Tác giả: [Tên sinh viên]
+Ngày tạo: [Ngày tạo dự án]
+Cập nhật lần cuối: [Ngày cập nhật]

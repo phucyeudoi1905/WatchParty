@@ -9,15 +9,18 @@ const Room = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { socket, isConnected, joinRoom, leaveRoom, sendMessage: sendSocketMessage, onEvent, sendVideoControl, requestSync, sendSyncState } = useSocket();
+  const { socket, isConnected, joinRoom, leaveRoom, sendMessage: sendSocketMessage, onEvent, sendVideoControl, requestSync, sendSyncState, sendTyping, sendMessageSeen } = useSocket();
   
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [usersInRoom, setUsersInRoom] = useState([]);
+  const [typingUser, setTypingUser] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [activeReactionFor, setActiveReactionFor] = useState(null);
   
   const videoRef = useRef(null);
   const playerRef = useRef(null);
@@ -30,12 +33,20 @@ const Room = () => {
     joinRoom(roomId);
 
     const offChat = onEvent('chat-message', (data) => {
-      setMessages(prev => [...prev, {
+      const msg = {
+        id: data.id || data._id || Math.random().toString(36).slice(2),
         userId: data.userId,
         username: data.username,
-        content: data.message,
-        timestamp: data.timestamp
-      }]);
+        content: data.content || data.message,
+        timestamp: data.timestamp || data.createdAt || new Date().toISOString(),
+        reactions: data.reactions || [],
+        seenBy: data.seenBy || []
+      };
+      setMessages(prev => [...prev, msg]);
+      // emit seen for incoming messages not from self
+      if (data.userId && data.userId !== user._id && msg.id) {
+        try { sendMessageSeen(roomId, msg.id); } catch (_) {}
+      }
     });
 
     const offJoined = onEvent('user-joined', (userData) => {
@@ -44,6 +55,18 @@ const Room = () => {
 
     const offUsers = onEvent('room-users', (users) => {
       setUsersInRoom(users);
+    });
+
+    const offTyping = onEvent('user-typing', ({ userId: typingId, username: typingName, isTyping }) => {
+      if (typingId === user._id) return; // ignore self
+      if (isTyping) {
+        setTypingUser(typingName || 'Someone');
+        // auto clear after 3s
+        clearTimeout(window.__typingTimer);
+        window.__typingTimer = setTimeout(() => setTypingUser(null), 3000);
+      } else {
+        setTypingUser(null);
+      }
     });
 
     const offVideo = onEvent('video-control', (data) => {
@@ -150,6 +173,7 @@ const Room = () => {
       offJoined && offJoined();
       offUsers && offUsers();
       offVideo && offVideo();
+      offTyping && offTyping();
       offSyncState && offSyncState();
       offRequestSync && offRequestSync();
     };
@@ -161,7 +185,44 @@ const Room = () => {
 
     sendSocketMessage(roomId, newMessage);
     setNewMessage('');
+    setShowEmojiPicker(false);
   };
+
+  const EMOJIS = ['👍','❤️','😂','😮','😢','😡','😊','🔥','🎉','👏','😎','🙏'];
+
+  const appendEmoji = (emoji) => {
+    setNewMessage(prev => (prev || '') + emoji);
+  };
+
+  const toggleReaction = async (messageId, emoji) => {
+    if (!messageId) return;
+    try {
+      const res = await fetch(`/api/messages/${roomId}/${messageId}/reaction`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ emoji })
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      const updated = body?.data;
+      if (updated && updated.id) {
+        setMessages(prev => prev.map(m => (m.id === updated.id ? { ...m, reactions: updated.reactions } : m)));
+      }
+    } catch (_) {}
+  };
+
+  // typing emit
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    if (newMessage && newMessage.length > 0) {
+      sendTyping(roomId, true);
+    }
+    const t = setTimeout(() => sendTyping(roomId, false), 1000);
+    return () => clearTimeout(t);
+  }, [newMessage, socket, isConnected, roomId, sendTyping]);
 
   const toggleVideo = () => {
     setIsVideoEnabled(!isVideoEnabled);
@@ -353,23 +414,69 @@ const Room = () => {
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {messages.map((message, index) => (
                   <div
-                    key={index}
-                    className={`flex ${
-                      message.userId === user._id ? 'justify-end' : 'justify-start'
+                    key={message.id || index}
+                    className={`flex flex-col ${
+                      message.userId === user._id ? 'items-end' : 'items-start'
                     }`}
                   >
                     <div
-                      className={`max-w-xs px-3 py-2 rounded-lg ${
+                      className={`group max-w-xs px-3 py-2 rounded-lg ${
                         message.userId === user._id
                           ? 'bg-blue-500 text-white'
                           : 'bg-gray-200 text-gray-800'
                       }`}
+                      onPointerDown={() => {
+                        if (!message.id) return;
+                        setActiveReactionFor(message.id);
+                        clearTimeout(window.__lpTimer);
+                        window.__lpTimer = setTimeout(() => setActiveReactionFor(null), 2500);
+                      }}
+                      onPointerUp={() => {
+                        clearTimeout(window.__lpTimer);
+                      }}
+                      onPointerLeave={() => {
+                        clearTimeout(window.__lpTimer);
+                      }}
                     >
                       <div className="text-xs opacity-75 mb-1">
                         {message.username}
                       </div>
                       <div>{message.content}</div>
+                      {Array.isArray(message.reactions) && message.reactions.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {Object.entries((message.reactions || []).reduce((acc, r) => {
+                            acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc;
+                          }, {})).map(([emo, count]) => (
+                            <span key={emo} className="text-[10px] px-1.5 py-0.5 bg-black/10 rounded-full">
+                              {emo} {count}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {Array.isArray(message.seenBy) && message.seenBy.length > 0 && (
+                        <div className="mt-1 text-[10px] opacity-70 flex items-center space-x-1">
+                          <span>Seen by</span>
+                          <span>{message.seenBy.map(s => s.username || 'User').join(', ')}</span>
+                        </div>
+                      )}
                     </div>
+                    {message.id && (
+                      <div
+                        className="mt-1 flex gap-1 opacity-0 group-hover:opacity-70 transition-opacity duration-150"
+                        style={{ opacity: activeReactionFor === message.id ? 0.7 : undefined }}
+                      >
+                        {['👍','❤️','😂','😮','😢','😡'].map(emo => (
+                          <button
+                            key={emo}
+                            onClick={() => toggleReaction(message.id, emo)}
+                            className="text-[12px] hover:opacity-100"
+                            title={`React ${emo}`}
+                          >
+                            {emo}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
@@ -378,6 +485,29 @@ const Room = () => {
               {/* Message Input */}
               <div className="p-4 border-t">
                 <div className="flex space-x-2">
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowEmojiPicker((s) => !s)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      title="Emoji"
+                    >
+                      🙂
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-12 z-10 p-2 w-52 bg-white border rounded-lg shadow-sm grid grid-cols-6 gap-1">
+                        {EMOJIS.map((e) => (
+                          <button
+                            key={e}
+                            onClick={() => appendEmoji(e)}
+                            className="text-xl hover:bg-gray-100 rounded"
+                            title={e}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={newMessage}
@@ -393,6 +523,9 @@ const Room = () => {
                     Gửi
                   </button>
                 </div>
+                {typingUser && (
+                  <div className="mt-2 text-xs text-gray-500">{typingUser} is typing...</div>
+                )}
               </div>
             </div>
 

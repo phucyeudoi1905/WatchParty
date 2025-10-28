@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   passwordHash: {
     type: String,
-    required: [true, 'Mật khẩu là bắt buộc'],
+    required: false, // Will be set by virtual or pre-save hook
     minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự']
   },
   role: {
@@ -49,17 +49,34 @@ const userSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 // Virtual field cho password (không lưu vào DB)
 userSchema.virtual('password')
   .set(function(password) {
+    this._password = password;
     this.passwordHash = bcrypt.hashSync(password, 12);
   })
   .get(function() {
-    return this.passwordHash;
+    return this._password;
   });
+
+// Pre-save hook để validate mật khẩu
+userSchema.pre('save', function(next) {
+  // Nếu là user mới và chưa có passwordHash
+  if (this.isNew && !this.passwordHash) {
+    // Kiểm tra nếu có password được set qua virtual
+    if (this._password) {
+      this.passwordHash = bcrypt.hashSync(this._password, 12);
+    } else {
+      return next(new Error('Mật khẩu là bắt buộc'));
+    }
+  }
+  next();
+});
 
 // Method để so sánh mật khẩu
 userSchema.methods.comparePassword = function(candidatePassword) {

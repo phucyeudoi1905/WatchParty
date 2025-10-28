@@ -52,7 +52,19 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf, encoding) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      console.error('JSON Parse Error:', e.message);
+      console.error('Raw body:', buf.toString());
+      res.status(400).json({ error: 'Invalid JSON format' });
+      throw e;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Passport middleware

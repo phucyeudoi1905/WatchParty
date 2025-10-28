@@ -61,9 +61,11 @@ router.post('/register', [
     // Tạo user mới
     const user = new User({
       username,
-      email,
-      password // Sẽ được hash tự động qua virtual field
+      email
     });
+    
+    // Set password để trigger virtual setter
+    user.password = password;
 
     await user.save();
 
@@ -78,6 +80,8 @@ router.post('/register', [
 
   } catch (error) {
     console.error('Lỗi đăng ký:', error);
+    console.error('Error details:', error.message);
+    console.error('Stack:', error.stack);
     
     if (error.code === 11000) {
       return res.status(400).json({
@@ -88,7 +92,8 @@ router.post('/register', [
 
     res.status(500).json({
       error: 'Lỗi đăng ký',
-      code: 'REGISTRATION_ERROR'
+      code: 'REGISTRATION_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

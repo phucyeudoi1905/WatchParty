@@ -178,6 +178,105 @@ const Room = () => {
       offRequestSync && offRequestSync();
     };
   }, [socket, isConnected, roomId, user, joinRoom, leaveRoom, onEvent, navigate, requestSync, sendSyncState, isPlaying]);
+  const isHost = !!(room && user && (
+    (typeof room.hostId === 'string' && room.hostId === user._id) ||
+    (room.hostId && room.hostId._id && room.hostId._id === user._id)
+  ));
+
+  const allowVideoControl = !!(room && room.settings && room.settings.allowVideoControl);
+
+  const toggleAllowVideoControl = async () => {
+    if (!isHost) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ settings: { allowVideoControl: !allowVideoControl } })
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Cập nhật thất bại');
+      }
+      const data = await res.json();
+      const updated = data.room || data;
+      setRoom(prev => ({ ...(prev || {}), ...(updated || {}) }));
+      toast.success(!allowVideoControl ? 'Đã bật quyền điều khiển video cho thành viên' : 'Đã tắt quyền điều khiển video cho thành viên');
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể cập nhật cài đặt phòng');
+    }
+  };
+
+  const copyRoomCode = async () => {
+    if (!room?.roomCode) return;
+    try {
+      await navigator.clipboard.writeText(room.roomCode);
+      toast.success('Đã sao chép mã phòng');
+    } catch (_) {
+      // Fallback
+      const textarea = document.createElement('textarea');
+      textarea.value = room.roomCode;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      toast.success('Đã sao chép mã phòng');
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    if (!isHost) return;
+    const ok = window.confirm('Bạn có chắc muốn xóa phòng này? Hành động không thể hoàn tác.');
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Xóa phòng thất bại');
+      }
+      toast.success('Đã xóa phòng');
+      navigate('/dashboard');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Không thể xóa phòng');
+    }
+  };
+
+  const transferHost = async (targetUserId) => {
+    if (!isHost || !targetUserId) return;
+    const ok = window.confirm('Chuyển quyền chủ phòng cho thành viên này?');
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/transfer-host`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ targetUserId })
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Không thể chuyển quyền');
+      }
+      const data = await res.json();
+      const updated = data.room || data;
+      setRoom(prev => ({ ...(prev || {}), ...(updated || {}) }));
+      toast.success('Đã chuyển quyền chủ phòng');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Không thể chuyển quyền');
+    }
+  };
+
   
 
   const sendMessage = () => {
@@ -305,9 +404,57 @@ const Room = () => {
           <div className="flex justify-between items-center py-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{room.name}</h1>
-              <p className="text-gray-600">{usersInRoom.length} người tham gia</p>
+              <div className="mt-1 flex items-center gap-3 text-sm text-gray-600">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-gray-500">Mã phòng:</span>
+                  <span className="font-semibold tracking-wider">{room.roomCode || '—'}</span>
+                  {room.roomCode && (
+                    <button
+                      onClick={copyRoomCode}
+                      className="px-2 py-0.5 text-xs rounded border border-gray-300 hover:bg-gray-50"
+                      title="Sao chép mã phòng"
+                    >
+                      Sao chép
+                    </button>
+                  )}
+                </span>
+                <span className="hidden sm:inline text-gray-400">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500">Chủ phòng:</span>
+                  <span className="font-medium">
+                    {(room?.hostId && typeof room.hostId === 'object' && room.hostId.username) ? room.hostId.username : '—'}
+                  </span>
+                </span>
+                <span className="inline-flex items-center">
+                  {room.isPrivate ? (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">Riêng tư</span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">Công khai</span>
+                  )}
+                </span>
+                <span className="hidden sm:inline text-gray-400">•</span>
+                <span className="text-gray-600">{usersInRoom.length} người tham gia</span>
+              </div>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex space-x-3 items-center">
+              {isHost && (
+                <button
+                  onClick={toggleAllowVideoControl}
+                  className={`px-4 py-2 rounded-lg border ${allowVideoControl ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                  title="Cho phép thành viên điều khiển video"
+                >
+                  {allowVideoControl ? 'Thành viên được điều khiển' : 'Chỉ host/mod được điều khiển'}
+                </button>
+              )}
+              {isHost && (
+                <button
+                  onClick={handleDeleteRoom}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 border border-red-600"
+                  title="Xóa phòng"
+                >
+                  Xóa phòng
+                </button>
+              )}
               <button
                 onClick={toggleVideo}
                 className={`px-4 py-2 rounded-lg ${
@@ -536,14 +683,27 @@ const Room = () => {
               </div>
               <div className="p-4">
                 <div className="space-y-2">
-                  {usersInRoom.map((userId) => (
-                    <div key={userId} className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-sm text-gray-700">
-                        {userId === user._id ? 'Bạn' : `User ${userId.slice(-4)}`}
-                      </span>
+                  {(room?.members || []).map((m) => (
+                    <div key={m.userId} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-sm text-gray-700">
+                          {m.username} {m.isHost ? '(Host)' : m.isModerator ? '(Mod)' : ''} {m.userId === user._id ? '(Bạn)' : ''}
+                        </span>
+                      </div>
+                      {isHost && !m.isHost && (
+                        <button
+                          onClick={() => transferHost(m.userId)}
+                          className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+                        >
+                          Chuyển quyền chủ phòng
+                        </button>
+                      )}
                     </div>
                   ))}
+                  {(!room?.members || room.members.length === 0) && (
+                    <div className="text-sm text-gray-500">Chưa có dữ liệu thành viên.</div>
+                  )}
                 </div>
               </div>
             </div>

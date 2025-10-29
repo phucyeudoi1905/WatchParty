@@ -51,6 +51,17 @@ const messageSchema = new mongoose.Schema({
     },
     username: String
   }],
+  seenBy: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    username: String,
+    seenAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   metadata: {
     videoTime: Number, // Thời điểm video khi gửi tin nhắn
     userAgent: String, // Thông tin trình duyệt
@@ -120,6 +131,7 @@ messageSchema.methods.toPublicJSON = function() {
     replyTo: this.replyTo,
     reactions: this.reactions,
     reactionCount: this.reactionCount,
+    seenBy: this.seenBy,
     metadata: this.metadata,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
@@ -143,5 +155,6 @@ messageSchema.index({ roomId: 1, createdAt: -1 });
 messageSchema.index({ userId: 1 });
 messageSchema.index({ messageType: 1 });
 messageSchema.index({ createdAt: -1 });
+messageSchema.index({ 'seenBy.userId': 1 });
 
 module.exports = mongoose.model('Message', messageSchema);

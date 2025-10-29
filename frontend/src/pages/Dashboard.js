@@ -207,6 +207,10 @@ const Dashboard = () => {
                           <span>{room.memberCount} thành viên</span>
                         </div>
                         <div className="flex items-center space-x-1">
+                          <span className="w-4 h-4 inline-flex items-center justify-center">👑</span>
+                          <span>Chủ phòng: {room.hostId?.username || '—'}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
                           <Clock className="w-4 h-4" />
                           <span>{new Date(room.createdAt).toLocaleDateString('vi-VN')}</span>
                         </div>

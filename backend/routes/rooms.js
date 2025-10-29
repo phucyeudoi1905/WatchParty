@@ -6,6 +6,58 @@ const { requireHost, requireRoomMember } = require('../middleware/auth');
 
 const router = express.Router();
 
+// API endpoint để thay đổi URL video (chỉ host mới có quyền)
+router.put('/:roomId/video-url', requireHost, [
+  body('videoUrl')
+    .notEmpty()
+    .withMessage('URL video là bắt buộc')
+    .isURL()
+    .withMessage('URL video không hợp lệ'),
+  body('videoType')
+    .optional()
+    .isIn(['youtube', 'hls', 'mp4'])
+    .withMessage('Loại video không hợp lệ')
+], async (req, res) => {
+  try {
+    console.log('[rooms] video-url change request', {
+      roomId: req.params.roomId,
+      user: req.user ? { id: req.user._id, username: req.user.username } : null,
+      body: req.body
+    });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Dữ liệu không hợp lệ',
+        details: errors.array()
+      });
+    }
+
+    const { videoUrl, videoType = 'youtube' } = req.body;
+    const room = await Room.findById(req.params.roomId);
+
+    room.videoUrl = videoUrl;
+    room.videoType = videoType;
+    await room.save();
+
+    // Emit event to all room members (guard if io not available)
+    const io = req.app.get && req.app.get('io');
+    if (io && typeof io.to === 'function') {
+      io.to(req.params.roomId).emit('video-url-changed', {
+        videoUrl,
+        videoType,
+        updatedBy: req.user.username
+      });
+    } else {
+      console.warn('[rooms] io instance not available, skipping emit for video-url-changed');
+    }
+
+    res.json({ room });
+  } catch (error) {
+    console.error('Lỗi khi cập nhật URL video:', error);
+    res.status(500).json({ error: 'Không thể cập nhật URL video' });
+  }
+});
+
 // Tạo phòng mới
 router.post('/', [
   body('name')

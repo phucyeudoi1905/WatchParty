@@ -36,6 +36,9 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
+// Expose io instance on app for routes to use
+app.set('io', io);
+
 // Middleware
 app.use(helmet());
 app.use(cors({

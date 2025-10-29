@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import toast from 'react-hot-toast';
+import { Settings } from 'lucide-react';
 
 const Room = () => {
   const { roomId } = useParams();
@@ -21,6 +22,9 @@ const Room = () => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeReactionFor, setActiveReactionFor] = useState(null);
+    const [showVideoUrlModal, setShowVideoUrlModal] = useState(false);
+    const [newVideoUrl, setNewVideoUrl] = useState('');
+    const [newVideoType, setNewVideoType] = useState('youtube');
   
   const videoRef = useRef(null);
   const playerRef = useRef(null);
@@ -67,6 +71,15 @@ const Room = () => {
       } else {
         setTypingUser(null);
       }
+    });
+
+    const offVideoUrlChanged = onEvent('video-url-changed', ({ videoUrl, videoType, updatedBy }) => {
+      setRoom(prev => ({
+        ...(prev || {}),
+        videoUrl,
+        videoType
+      }));
+      toast.success(`${updatedBy} đã thay đổi video`);
     });
 
     const offVideo = onEvent('video-control', (data) => {
@@ -148,14 +161,17 @@ const Room = () => {
     // Lấy thông tin phòng
     (async () => {
       try {
+        console.log('[Room] fetching room', roomId);
         const response = await fetch(`/api/rooms/${roomId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
+        console.log('[Room] fetch response status', response.status);
         
         if (response.ok) {
           const roomData = await response.json();
+          console.log('[Room] room data', roomData);
           setRoom(roomData.room || roomData);
         } else {
           toast.error('Không thể tải thông tin phòng');
@@ -174,14 +190,27 @@ const Room = () => {
       offUsers && offUsers();
       offVideo && offVideo();
       offTyping && offTyping();
+      offVideoUrlChanged && offVideoUrlChanged();
       offSyncState && offSyncState();
       offRequestSync && offRequestSync();
     };
   }, [socket, isConnected, roomId, user, joinRoom, leaveRoom, onEvent, navigate, requestSync, sendSyncState, isPlaying]);
-  const isHost = !!(room && user && (
-    (typeof room.hostId === 'string' && room.hostId === user._id) ||
-    (room.hostId && room.hostId._id && room.hostId._id === user._id)
-  ));
+  // Normalize IDs: backend may return hostId as ObjectId or string; user object may have `id` (from toPublicJSON) or `_id`.
+  const normalizeId = (val) => {
+    if (!val && val !== 0) return null;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (val._id) return String(val._id);
+      if (val.id) return String(val.id);
+      try { return String(val); } catch (_) { return null; }
+    }
+    return String(val);
+  };
+
+  const roomHostId = normalizeId(room?.hostId);
+  const userId = normalizeId(user?._id ?? user?.id ?? user);
+
+  const isHost = !!(roomHostId && userId && roomHostId === userId);
 
   const allowVideoControl = !!(room && room.settings && room.settings.allowVideoControl);
 
@@ -276,8 +305,53 @@ const Room = () => {
       toast.error(err.message || 'Không thể chuyển quyền');
     }
   };
-
   
+  const handleChangeVideoUrl = async () => {
+    if (!isHost) {
+      toast.error('Chỉ host mới có quyền thay đổi URL');
+      return;
+    }
+    if (!newVideoUrl.trim()) {
+      toast.error('Vui lòng nhập URL hợp lệ');
+      return;
+    }
+
+    try {
+      console.log('[Room] PUT /api/rooms/' + roomId + '/video-url', { videoUrl: newVideoUrl, videoType: newVideoType });
+      const res = await fetch(`/api/rooms/${roomId}/video-url`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          videoUrl: newVideoUrl,
+          videoType: newVideoType
+        })
+      });
+
+      const text = await res.text();
+      let body = null;
+      try { body = JSON.parse(text); } catch (_) { body = { raw: text }; }
+      console.log('[Room] video-url response', res.status, body);
+
+      if (!res.ok) {
+        const message = body?.error || body?.message || (body?.details ? JSON.stringify(body.details) : null) || `Lỗi server (${res.status})`;
+        toast.error('Không thể cập nhật URL: ' + message);
+        return;
+      }
+
+      const data = body || {};
+      const updated = data.room || data;
+      setRoom(prev => ({ ...(prev || {}), ...(updated || {}) }));
+      setShowVideoUrlModal(false);
+      setNewVideoUrl('');
+      toast.success('Đã cập nhật URL video mới');
+    } catch (err) {
+      console.error('Lỗi khi gọi API cập nhật URL video:', err);
+      toast.error('Lỗi khi gửi yêu cầu cập nhật URL');
+    }
+  };
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
@@ -437,22 +511,15 @@ const Room = () => {
               </div>
             </div>
             <div className="flex space-x-3 items-center">
+              {/* Removed: allowVideoControl toggle and delete room buttons per request */}
               {isHost && (
                 <button
-                  onClick={toggleAllowVideoControl}
-                  className={`px-4 py-2 rounded-lg border ${allowVideoControl ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                  title="Cho phép thành viên điều khiển video"
+                  onClick={() => { setShowVideoUrlModal(true); setNewVideoUrl(room?.videoUrl || ''); setNewVideoType(room?.videoType || 'youtube'); }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white border border-blue-600 hover:bg-blue-700"
+                  title="Cài đặt phòng"
                 >
-                  {allowVideoControl ? 'Thành viên được điều khiển' : 'Chỉ host/mod được điều khiển'}
-                </button>
-              )}
-              {isHost && (
-                <button
-                  onClick={handleDeleteRoom}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 border border-red-600"
-                  title="Xóa phòng"
-                >
-                  Xóa phòng
+                  <Settings className="w-4 h-4 text-white" />
+                  <span className="hidden sm:inline">Setting</span>
                 </button>
               )}
               <button
@@ -469,8 +536,8 @@ const Room = () => {
                 onClick={toggleAudio}
                 className={`px-4 py-2 rounded-lg ${
                   isAudioEnabled 
-                    ? 'bg-red-500 text-white' 
-                    : 'bg-gray-200 text-gray-700'
+                    ? 'bg-green-600 text-white border border-green-600' 
+                    : 'bg-gray-200 text-gray-700 border border-gray-300'
                 }`}
               >
                 {isAudioEnabled ? 'Tắt Âm thanh' : 'Bật Âm thanh'}
@@ -503,6 +570,7 @@ const Room = () => {
                         height="100%"
                         playing={isPlaying}
                         controls
+                        muted={!isAudioEnabled}
                         onPlay={handleReactPlayerPlay}
                         onPause={handleReactPlayerPause}
                         onSeek={handleReactPlayerSeek}
@@ -710,6 +778,37 @@ const Room = () => {
           </div>
         </div>
       </div>
+      {/* Modal: Change Video URL (only visible to host) */}
+      {showVideoUrlModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-3">Thay đổi URL video</h3>
+            <div className="mb-3">
+              <label className="block text-sm text-gray-700 mb-1">URL video</label>
+              <input
+                type="text"
+                value={newVideoUrl}
+                onChange={(e) => setNewVideoUrl(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg"
+                placeholder="https://..."
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm text-gray-700 mb-1">Loại video</label>
+              <select value={newVideoType} onChange={(e) => setNewVideoType(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                <option value="youtube">YouTube</option>
+                <option value="hls">HLS</option>
+                <option value="mp4">MP4</option>
+              </select>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowVideoUrlModal(false)} className="px-4 py-2 rounded-lg border">Hủy</button>
+              <button onClick={handleChangeVideoUrl} className="px-4 py-2 rounded-lg bg-blue-600 text-white">Lưu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

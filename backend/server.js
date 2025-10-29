@@ -16,9 +16,12 @@ console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Đã có' : '❌ Chưa 
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/rooms');
 const messageRoutes = require('./routes/messages');
-const { authenticateToken } = require('./middleware/auth');
+const { authenticateToken, requireAdmin } = require('./middleware/auth');
 const passport = require('./config/passport');
 const User = require('./models/User');
+const Message = require('./models/Message');
+const Room = require('./models/Room');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,6 +35,9 @@ const io = socketIo(server, {
   allowEIO3: true,
   transports: ['websocket', 'polling']
 });
+
+// Expose io instance on app for routes to use
+app.set('io', io);
 
 // Middleware
 app.use(helmet());
@@ -87,6 +93,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', authenticateToken, roomRoutes);
 app.use('/api/messages', authenticateToken, messageRoutes);
+app.use('/api/admin', authenticateToken, requireAdmin, adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -182,14 +189,35 @@ io.on('connection', (socket) => {
     console.log(`👋 ${username} đã rời phòng ${roomId}`);
   });
 
-  // Điều khiển video
-  socket.on('video-control', (data) => {
-    const { roomId, action, time } = data;
-    const userId = socket.user?._id;
-    
-    // Gửi điều khiển video cho tất cả trong phòng (trừ người gửi)
-    socket.to(roomId).emit('video-control', { action, time, userId });
-    console.log(`🎮 Video control: ${action} at ${time}s in room ${roomId}`);
+  // Điều khiển video (kiểm tra quyền)
+  socket.on('video-control', async (data) => {
+    try {
+      const { roomId, action, time } = data || {};
+      const userId = socket.user?._id;
+      if (!roomId || !action || !userId) return;
+
+      const room = await Room.findById(roomId);
+      if (!room) return;
+
+      const allowed = room.canUserControlVideo(userId);
+      if (!allowed) {
+        console.warn(`🚫 Video control denied for user ${userId} in room ${roomId}`);
+        return;
+      }
+
+      if (action === 'play') {
+        await room.updateVideoState(true, typeof time === 'number' ? time : room.currentVideoTime);
+      } else if (action === 'pause') {
+        await room.updateVideoState(false, typeof time === 'number' ? time : room.currentVideoTime);
+      } else if (action === 'seek' && typeof time === 'number') {
+        await room.updateVideoState(room.isPlaying, time);
+      }
+
+      socket.to(roomId).emit('video-control', { action, time, userId });
+      console.log(`🎮 Video control: ${action} at ${time}s in room ${roomId}`);
+    } catch (err) {
+      console.error('Video control error:', err.message);
+    }
   });
 
   // Client mới yêu cầu trạng thái đồng bộ từ phòng
@@ -211,15 +239,66 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Tin nhắn chat
-  socket.on('chat-message', (data) => {
-    const { roomId, message } = data;
+  // Tin nhắn chat (lưu DB rồi phát lại)
+  socket.on('chat-message', async (data) => {
+    try {
+      const { roomId, message } = data || {};
+      const userId = socket.user?._id;
+      const username = socket.user?.username;
+      if (!roomId || !message || !userId) return;
+
+      const saved = await new Message({
+        roomId,
+        userId,
+        username,
+        content: message,
+        metadata: {
+          userAgent: socket.handshake.headers && socket.handshake.headers['user-agent'],
+          ipAddress: socket.handshake.address
+        }
+      }).save();
+
+      io.to(roomId).emit('chat-message', saved.toPublicJSON());
+      console.log(`💬 Chat message in room ${roomId}: ${username}: ${message}`);
+    } catch (err) {
+      console.error('Lỗi lưu/chuyển tiếp tin nhắn:', err.message);
+    }
+  });
+
+  // Typing indicator
+  socket.on('user-typing', (data) => {
+    const { roomId, isTyping } = data || {};
     const userId = socket.user?._id;
     const username = socket.user?.username;
-    
-    // Gửi tin nhắn cho tất cả trong phòng
-    io.to(roomId).emit('chat-message', { message, userId, username, timestamp: new Date() });
-    console.log(`💬 Chat message in room ${roomId}: ${username}: ${message}`);
+    if (!roomId) return;
+    socket.to(roomId).emit('user-typing', { userId, username, isTyping: !!isTyping, ts: Date.now() });
+  });
+
+  // Message seen status
+  socket.on('message-seen', async (data) => {
+    try {
+      const { roomId, messageId } = data || {};
+      const userId = socket.user?._id;
+      const username = socket.user?.username;
+      if (!roomId || !messageId) return;
+
+      // Update seenBy in DB (add if not exists)
+      const updated = await Message.findOneAndUpdate(
+        { _id: messageId, roomId, 'seenBy.userId': { $ne: userId } },
+        { $push: { seenBy: { userId, username, seenAt: new Date() } } },
+        { new: true }
+      );
+
+      // Broadcast to room regardless (clients can dedupe)
+      io.to(roomId).emit('message-seen', {
+        messageId,
+        userId,
+        username,
+        seenAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Lỗi cập nhật trạng thái đã xem:', err.message);
+    }
   });
 
   // Ngắt kết nối

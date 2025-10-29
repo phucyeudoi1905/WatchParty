@@ -72,6 +72,10 @@ const roomSchema = new mongoose.Schema({
     isHost: {
       type: Boolean,
       default: false
+    },
+    isModerator: {
+      type: Boolean,
+      default: false
     }
   }],
   settings: {
@@ -123,7 +127,8 @@ roomSchema.methods.addMember = function(userId, username) {
     userId,
     username,
     joinedAt: new Date(),
-    isHost: this.hostId.toString() === userId.toString()
+    isHost: this.hostId.toString() === userId.toString(),
+    isModerator: false
   });
   
   return this.save();
@@ -151,6 +156,22 @@ roomSchema.methods.updateVideoState = function(isPlaying, currentTime) {
   return this.save();
 };
 
+// Helpers for permissions
+roomSchema.methods.isUserHost = function(userId) {
+  return this.hostId && this.hostId.toString() === userId.toString();
+};
+
+roomSchema.methods.isUserModerator = function(userId) {
+  return this.members.some(m => m.userId && m.userId.toString() === userId.toString() && m.isModerator);
+};
+
+roomSchema.methods.canUserControlVideo = function(userId) {
+  // Host or moderator always can
+  if (this.isUserHost(userId) || this.isUserModerator(userId)) return true;
+  // Otherwise depend on room setting allowVideoControl
+  return !!(this.settings && this.settings.allowVideoControl);
+};
+
 // Method để lấy thông tin công khai
 roomSchema.methods.toPublicJSON = function() {
   return {
@@ -163,6 +184,13 @@ roomSchema.methods.toPublicJSON = function() {
     isPrivate: this.isPrivate,
     maxMembers: this.maxMembers,
     memberCount: this.memberCount,
+    members: (this.members || []).map(m => ({
+      userId: m.userId,
+      username: m.username,
+      isHost: !!m.isHost,
+      isModerator: !!m.isModerator,
+      joinedAt: m.joinedAt
+    })),
     currentVideoTime: this.currentVideoTime,
     isPlaying: this.isPlaying,
     hostId: this.hostId,

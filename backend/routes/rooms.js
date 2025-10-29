@@ -6,6 +6,58 @@ const { requireHost, requireRoomMember } = require('../middleware/auth');
 
 const router = express.Router();
 
+// API endpoint để thay đổi URL video (chỉ host mới có quyền)
+router.put('/:roomId/video-url', requireHost, [
+  body('videoUrl')
+    .notEmpty()
+    .withMessage('URL video là bắt buộc')
+    .isURL()
+    .withMessage('URL video không hợp lệ'),
+  body('videoType')
+    .optional()
+    .isIn(['youtube', 'hls', 'mp4'])
+    .withMessage('Loại video không hợp lệ')
+], async (req, res) => {
+  try {
+    console.log('[rooms] video-url change request', {
+      roomId: req.params.roomId,
+      user: req.user ? { id: req.user._id, username: req.user.username } : null,
+      body: req.body
+    });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Dữ liệu không hợp lệ',
+        details: errors.array()
+      });
+    }
+
+    const { videoUrl, videoType = 'youtube' } = req.body;
+    const room = await Room.findById(req.params.roomId);
+
+    room.videoUrl = videoUrl;
+    room.videoType = videoType;
+    await room.save();
+
+    // Emit event to all room members (guard if io not available)
+    const io = req.app.get && req.app.get('io');
+    if (io && typeof io.to === 'function') {
+      io.to(req.params.roomId).emit('video-url-changed', {
+        videoUrl,
+        videoType,
+        updatedBy: req.user.username
+      });
+    } else {
+      console.warn('[rooms] io instance not available, skipping emit for video-url-changed');
+    }
+
+    res.json({ room });
+  } catch (error) {
+    console.error('Lỗi khi cập nhật URL video:', error);
+    res.status(500).json({ error: 'Không thể cập nhật URL video' });
+  }
+});
+
 // Tạo phòng mới
 router.post('/', [
   body('name')
@@ -363,6 +415,15 @@ router.put('/:id', requireHost, [
     .optional()
     .isBoolean()
     .withMessage('Trạng thái riêng tư không hợp lệ')
+  ,
+  body('settings')
+    .optional()
+    .isObject()
+    .withMessage('Cấu hình phòng không hợp lệ'),
+  body('settings.allowVideoControl')
+    .optional()
+    .isBoolean()
+    .withMessage('allowVideoControl phải là boolean')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -375,13 +436,19 @@ router.put('/:id', requireHost, [
     
     const room = req.room;
     const updates = req.body;
-    
-    // Cập nhật các trường được phép
+
+    // Cập nhật các trường được phép ở cấp 1
     Object.keys(updates).forEach(key => {
       if (['name', 'description', 'videoUrl', 'password', 'maxMembers', 'isPrivate', 'tags'].includes(key)) {
         room[key] = updates[key];
       }
     });
+
+    // Cập nhật settings.allowVideoControl nếu có
+    if (updates.settings && typeof updates.settings.allowVideoControl === 'boolean') {
+      room.settings = room.settings || {};
+      room.settings.allowVideoControl = updates.settings.allowVideoControl;
+    }
     
     await room.save();
     
@@ -443,6 +510,51 @@ router.get('/code/:roomCode', async (req, res) => {
       error: 'Lỗi tìm phòng',
       code: 'ROOM_SEARCH_ERROR'
     });
+  }
+});
+
+// Chuyển quyền chủ phòng (host -> member)
+router.put('/:id/transfer-host', requireHost, [
+  body('targetUserId')
+    .notEmpty()
+    .withMessage('targetUserId là bắt buộc')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dữ liệu không hợp lệ', details: errors.array() });
+    }
+
+    const room = req.room;
+    const { targetUserId } = req.body;
+
+    if (room.hostId.toString() === targetUserId.toString()) {
+      return res.status(400).json({ error: 'Người dùng đã là chủ phòng', code: 'ALREADY_HOST' });
+    }
+
+    const memberIndex = room.members.findIndex(m => m.userId && m.userId.toString() === targetUserId.toString());
+    if (memberIndex === -1) {
+      return res.status(404).json({ error: 'Người dùng không ở trong phòng', code: 'MEMBER_NOT_FOUND' });
+    }
+
+    // Unset current host flag
+    room.members = room.members.map(m => ({ ...m.toObject?.() || m, isHost: false }));
+
+    // Set new host flag
+    room.members[memberIndex].isHost = true;
+    room.hostId = room.members[memberIndex].userId;
+
+    await room.save();
+
+    await Message.createSystemMessage(room._id, `${req.user.username} đã chuyển quyền chủ phòng cho ${room.members[memberIndex].username}`);
+
+    res.json({
+      message: 'Chuyển quyền chủ phòng thành công',
+      room: room.toPublicJSON()
+    });
+  } catch (error) {
+    console.error('Lỗi chuyển quyền chủ phòng:', error);
+    res.status(500).json({ error: 'Lỗi chuyển quyền chủ phòng', code: 'TRANSFER_HOST_ERROR' });
   }
 });
 

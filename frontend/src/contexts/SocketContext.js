@@ -109,6 +109,20 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  // Typing indicator
+  const sendTyping = (roomId, isTyping) => {
+    if (socket && isConnected) {
+      socket.emit('user-typing', { roomId, isTyping: !!isTyping });
+    }
+  };
+
+  // Seen status
+  const sendMessageSeen = (roomId, messageId) => {
+    if (socket && isConnected) {
+      socket.emit('message-seen', { roomId, messageId });
+    }
+  };
+
   // Hàm điều khiển video
   const sendVideoControl = (roomId, action, time) => {
     if (socket && isConnected) {
@@ -158,6 +172,8 @@ export const SocketProvider = ({ children }) => {
     joinRoom,
     leaveRoom,
     sendMessage,
+    sendTyping,
+    sendMessageSeen,
     sendVideoControl,
     requestSync,
     sendSyncState,

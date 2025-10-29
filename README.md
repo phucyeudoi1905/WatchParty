@@ -19,10 +19,10 @@ Nền tảng xem video đồng bộ theo thời gian thực với chat, điều 
 
 - Trang tổng quan/luồng hệ thống:
 
-  ![Architecture Overview](image/README/1761331986198.png)
-- Luồng chức năng (ví dụ):
+  ![1761748960682](image/README/1761748960682.png)
 
-  ![Flow](image/README/1761331999428.png)
+  ![1761748428239](image/README/1761748428239.png)
+- Luồng chức năng:
 
 ---
 

@@ -7,6 +7,7 @@ Tài liệu này cung cấp hướng dẫn chi tiết để kiểm tra các API 
 **Base URL:** `http://localhost:5000/api`
 
 **Headers cần thiết:**
+
 ```
 Content-Type: application/json
 Authorization: Bearer <JWT_TOKEN> (cho các API yêu cầu xác thực)
@@ -17,6 +18,7 @@ Authorization: Bearer <JWT_TOKEN> (cho các API yêu cầu xác thực)
 ## 1. Authentication APIs (`/api/auth`)
 
 ### 1.1 Đăng ký tài khoản
+
 ```http
 POST /api/auth/register
 Content-Type: application/json
@@ -29,6 +31,7 @@ Content-Type: application/json
 ```
 
 **Response thành công (201):**
+
 ```json
 {
   "message": "Đăng ký thành công",
@@ -45,6 +48,7 @@ Content-Type: application/json
 ```
 
 **Test Cases:**
+
 - ✅ Đăng ký với dữ liệu hợp lệ
 - ❌ Username đã tồn tại
 - ❌ Email đã tồn tại
@@ -53,6 +57,7 @@ Content-Type: application/json
 - ❌ Email không hợp lệ
 
 ### 1.2 Đăng nhập
+
 ```http
 POST /api/auth/login
 Content-Type: application/json
@@ -64,6 +69,7 @@ Content-Type: application/json
 ```
 
 **Response thành công (200):**
+
 ```json
 {
   "message": "Đăng nhập thành công",
@@ -79,6 +85,7 @@ Content-Type: application/json
 ```
 
 **Test Cases:**
+
 - ✅ Đăng nhập với username hợp lệ
 - ✅ Đăng nhập với email hợp lệ
 - ❌ Sai mật khẩu
@@ -86,12 +93,14 @@ Content-Type: application/json
 - ❌ Tài khoản bị khóa
 
 ### 1.3 Lấy thông tin user hiện tại
+
 ```http
 GET /api/auth/me
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response thành công (200):**
+
 ```json
 {
   "user": {
@@ -106,20 +115,24 @@ Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 1.4 Đăng xuất
+
 ```http
 POST /api/auth/logout
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 1.5 Google OAuth
+
 ```http
 GET /api/auth/google
 ```
+
 Redirect đến Google OAuth page
 
 ```http
 GET /api/auth/google/callback
 ```
+
 Google callback endpoint
 
 ---
@@ -129,6 +142,7 @@ Google callback endpoint
 **Lưu ý:** Tất cả Room APIs yêu cầu JWT token trong header Authorization.
 
 ### 2.1 Tạo phòng mới
+
 ```http
 POST /api/rooms
 Authorization: Bearer <JWT_TOKEN>
@@ -147,6 +161,7 @@ Content-Type: application/json
 ```
 
 **Response thành công (201):**
+
 ```json
 {
   "message": "Tạo phòng thành công",
@@ -175,6 +190,7 @@ Content-Type: application/json
 ```
 
 **Test Cases:**
+
 - ✅ Tạo phòng công khai không mật khẩu
 - ✅ Tạo phòng riêng tư có mật khẩu
 - ❌ Tên phòng < 3 ký tự
@@ -182,12 +198,14 @@ Content-Type: application/json
 - ❌ maxMembers < 2 hoặc > 100
 
 ### 2.2 Lấy danh sách phòng công khai
+
 ```http
 GET /api/rooms?page=1&limit=10&search=phim&tags=comedy,music
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response thành công (200):**
+
 ```json
 {
   "rooms": [
@@ -218,18 +236,21 @@ Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 2.3 Lấy thông tin phòng theo ID
+
 ```http
 GET /api/rooms/ROOM_ID
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 2.4 Tìm phòng theo mã
+
 ```http
 GET /api/rooms/code/ABC123
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 2.5 Tham gia phòng
+
 ```http
 POST /api/rooms/ROOM_ID/join
 Authorization: Bearer <JWT_TOKEN>
@@ -241,6 +262,7 @@ Content-Type: application/json
 ```
 
 **Test Cases:**
+
 - ✅ Tham gia phòng không mật khẩu
 - ✅ Tham gia phòng có mật khẩu đúng
 - ❌ Sai mật khẩu phòng
@@ -249,12 +271,14 @@ Content-Type: application/json
 - ❌ Phòng không tồn tại
 
 ### 2.6 Rời phòng
+
 ```http
 POST /api/rooms/ROOM_ID/leave
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 2.7 Cập nhật thông tin phòng (chỉ host)
+
 ```http
 PUT /api/rooms/ROOM_ID
 Authorization: Bearer <JWT_TOKEN>
@@ -271,6 +295,7 @@ Content-Type: application/json
 ```
 
 ### 2.8 Xóa phòng (chỉ host)
+
 ```http
 DELETE /api/rooms/ROOM_ID
 Authorization: Bearer <JWT_TOKEN>
@@ -283,6 +308,7 @@ Authorization: Bearer <JWT_TOKEN>
 **Lưu ý:** Tất cả Message APIs yêu cầu JWT token và user phải là thành viên của phòng.
 
 ### 3.1 Gửi tin nhắn
+
 ```http
 POST /api/messages/ROOM_ID
 Authorization: Bearer <JWT_TOKEN>
@@ -295,6 +321,7 @@ Content-Type: application/json
 ```
 
 **Response thành công (201):**
+
 ```json
 {
   "message": "Gửi tin nhắn thành công",
@@ -316,6 +343,7 @@ Content-Type: application/json
 ```
 
 **Test Cases:**
+
 - ✅ Gửi tin nhắn thường
 - ✅ Reply tin nhắn
 - ❌ Nội dung trống
@@ -324,12 +352,14 @@ Content-Type: application/json
 - ❌ Không phải thành viên phòng
 
 ### 3.2 Lấy danh sách tin nhắn
+
 ```http
 GET /api/messages/ROOM_ID?page=1&limit=50&before=2024-01-01T00:00:00.000Z
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 3.3 Chỉnh sửa tin nhắn
+
 ```http
 PUT /api/messages/ROOM_ID/MESSAGE_ID
 Authorization: Bearer <JWT_TOKEN>
@@ -341,12 +371,14 @@ Content-Type: application/json
 ```
 
 ### 3.4 Xóa tin nhắn
+
 ```http
 DELETE /api/messages/ROOM_ID/MESSAGE_ID
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 3.5 Thêm reaction
+
 ```http
 POST /api/messages/ROOM_ID/MESSAGE_ID/reaction
 Authorization: Bearer <JWT_TOKEN>
@@ -358,12 +390,14 @@ Content-Type: application/json
 ```
 
 ### 3.6 Lấy tin nhắn theo ID
+
 ```http
 GET /api/messages/ROOM_ID/MESSAGE_ID
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 ### 3.7 Tìm kiếm tin nhắn
+
 ```http
 GET /api/messages/ROOM_ID/search?q=hello&page=1&limit=20
 Authorization: Bearer <JWT_TOKEN>
@@ -374,11 +408,13 @@ Authorization: Bearer <JWT_TOKEN>
 ## 4. Health Check
 
 ### 4.1 Kiểm tra trạng thái server
+
 ```http
 GET /health
 ```
 
 **Response thành công (200):**
+
 ```json
 {
   "status": "OK",
@@ -393,6 +429,7 @@ GET /health
 **Connection:** `ws://localhost:5000`
 
 ### 5.1 Tham gia phòng
+
 ```javascript
 socket.emit('join-room', {
   roomId: 'room_id',
@@ -402,6 +439,7 @@ socket.emit('join-room', {
 ```
 
 ### 5.2 Điều khiển video
+
 ```javascript
 socket.emit('video-control', {
   roomId: 'room_id',
@@ -412,6 +450,7 @@ socket.emit('video-control', {
 ```
 
 ### 5.3 Gửi tin nhắn chat
+
 ```javascript
 socket.emit('chat-message', {
   roomId: 'room_id',
@@ -422,6 +461,7 @@ socket.emit('chat-message', {
 ```
 
 ### 5.4 Rời phòng
+
 ```javascript
 socket.emit('leave-room', {
   roomId: 'room_id',
@@ -435,6 +475,7 @@ socket.emit('leave-room', {
 ## 6. Error Codes
 
 ### Authentication Errors
+
 - `USERNAME_EXISTS`: Tên người dùng đã tồn tại
 - `EMAIL_EXISTS`: Email đã được sử dụng
 - `INVALID_CREDENTIALS`: Sai thông tin đăng nhập
@@ -443,6 +484,7 @@ socket.emit('leave-room', {
 - `TOKEN_EXPIRED`: Token đã hết hạn
 
 ### Room Errors
+
 - `ROOM_NOT_FOUND`: Phòng không tồn tại
 - `ROOM_DELETED`: Phòng đã bị xóa
 - `WRONG_PASSWORD`: Sai mật khẩu phòng
@@ -450,6 +492,7 @@ socket.emit('leave-room', {
 - `ALREADY_MEMBER`: Đã là thành viên
 
 ### Message Errors
+
 - `CHAT_DISABLED`: Chat bị tắt
 - `MESSAGE_NOT_FOUND`: Tin nhắn không tồn tại
 - `EDIT_PERMISSION_DENIED`: Không có quyền chỉnh sửa
@@ -460,6 +503,7 @@ socket.emit('leave-room', {
 ## 7. Testing Tools
 
 ### Postman Collection
+
 1. Import file này vào Postman
 2. Tạo environment với variables:
    - `baseUrl`: http://localhost:5000/api
@@ -468,6 +512,7 @@ socket.emit('leave-room', {
 ### Curl Examples
 
 **Đăng ký:**
+
 ```bash
 curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
@@ -479,6 +524,7 @@ curl -X POST http://localhost:5000/api/auth/register \
 ```
 
 **Đăng nhập:**
+
 ```bash
 curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
@@ -489,6 +535,7 @@ curl -X POST http://localhost:5000/api/auth/login \
 ```
 
 **Tạo phòng:**
+
 ```bash
 curl -X POST http://localhost:5000/api/rooms \
   -H "Content-Type: application/json" \
@@ -505,6 +552,7 @@ curl -X POST http://localhost:5000/api/rooms \
 ## 8. Testing Checklist
 
 ### ✅ Authentication Flow
+
 - [ ] Đăng ký với dữ liệu hợp lệ
 - [ ] Đăng nhập thành công
 - [ ] Lấy thông tin user
@@ -512,6 +560,7 @@ curl -X POST http://localhost:5000/api/rooms \
 - [ ] Google OAuth flow
 
 ### ✅ Room Management
+
 - [ ] Tạo phòng công khai
 - [ ] Tạo phòng riêng tư có mật khẩu
 - [ ] Tham gia phòng
@@ -521,6 +570,7 @@ curl -X POST http://localhost:5000/api/rooms \
 - [ ] Tìm phòng theo mã
 
 ### ✅ Messaging
+
 - [ ] Gửi tin nhắn
 - [ ] Chỉnh sửa tin nhắn
 - [ ] Xóa tin nhắn
@@ -529,12 +579,14 @@ curl -X POST http://localhost:5000/api/rooms \
 - [ ] Tìm kiếm tin nhắn
 
 ### ✅ Real-time Features
+
 - [ ] Socket connection
 - [ ] Join/leave room events
 - [ ] Video control synchronization
 - [ ] Real-time chat
 
 ### ✅ Error Handling
+
 - [ ] Validation errors
 - [ ] Authentication errors
 - [ ] Permission errors
@@ -546,11 +598,13 @@ curl -X POST http://localhost:5000/api/rooms \
 ## 9. Performance Testing
 
 ### Load Testing
+
 - Concurrent users: 100+
 - Messages per second: 50+
 - Room capacity: 20 users per room
 
 ### Rate Limiting
+
 - 100 requests per 15 minutes per IP
 - Chat message rate limiting via Socket.io
 

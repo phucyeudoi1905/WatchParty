@@ -10,7 +10,6 @@ THÔNG TIN REPOSITORY:
                        Hoàng Long- 2212407
                        Nguyễn Hoàng Sang- 2212451     
 - Branch chính: main
-- Ngôn ngữ chính: JavaScript, HTML, CSS
 - Framework: React.js (Frontend), Node.js + Express (Backend)
 
 CẤU TRÚC DỰ ÁN:
@@ -66,7 +65,3 @@ COMMITS CHÍNH:
 - Database scripts: Thêm scripts quản lý database
 - Executable files: Tạo files tự chạy cho deployment
 
-LICENSE: MIT License
-Tác giả: [Tên sinh viên]
-Ngày tạo: [Ngày tạo dự án]
-Cập nhật lần cuối: [Ngày cập nhật]

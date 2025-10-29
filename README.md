@@ -24,6 +24,8 @@ Nền tảng xem video đồng bộ theo thời gian thực với chat, điều 
   ![1761748428239](image/README/1761748428239.png)
 - Luồng chức năng:
 
+  ![1761749452861](image/README/1761749452861.png)
+
 ---
 
 ## 2) Kiến trúc

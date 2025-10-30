@@ -83,7 +83,8 @@ const Room = () => {
     });
 
     const offVideo = onEvent('video-control', (data) => {
-      const { action, time } = data;
+      const { action, time, senderId } = data || {};
+      if (senderId && socket && senderId === socket.id) return;
       const player = playerRef.current;
       const video = videoRef.current;
 
@@ -98,7 +99,7 @@ const Room = () => {
         } else if (action === 'pause') {
           setIsPlaying(false);
         }
-        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
+        setTimeout(() => { applyingRemoteRef.current = false; }, 250);
       } else if (video) {
         applyingRemoteRef.current = true;
         if (typeof time === 'number' && !Number.isNaN(time)) {
@@ -116,7 +117,7 @@ const Room = () => {
             video.currentTime = time;
           }
         }
-        setTimeout(() => { applyingRemoteRef.current = false; }, 120);
+        setTimeout(() => { applyingRemoteRef.current = false; }, 250);
       }
     });
 

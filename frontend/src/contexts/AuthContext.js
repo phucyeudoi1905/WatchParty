@@ -17,6 +17,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
 
+  // Cấu hình axios baseURL theo môi trường (frontend and backend tách domain)
+  if (!axios.defaults.baseURL) {
+    axios.defaults.baseURL = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
+  }
+
   // Cấu hình axios
   useEffect(() => {
     if (token) {
@@ -32,7 +37,8 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.get('/api/auth/me');
       setUser(response.data.user);
     } catch (error) {
-      console.error('Lỗi lấy thông tin user:', error);
+      const message = error?.response?.data?.error || error.message || 'Lỗi lấy thông tin user';
+      console.error('Lỗi lấy thông tin user:', message);
       localStorage.removeItem('token');
       setToken(null);
       setUser(null);
@@ -54,7 +60,7 @@ export const AuthProvider = ({ children }) => {
       toast.success('Đăng nhập thành công!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.error || 'Đăng nhập thất bại';
+      const message = error?.response?.data?.error || error.message || 'Đăng nhập thất bại';
       toast.error(message);
       return { success: false, error: message };
     }
@@ -73,7 +79,7 @@ export const AuthProvider = ({ children }) => {
       toast.success('Đăng ký thành công!');
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.error || 'Đăng ký thất bại';
+      const message = error?.response?.data?.error || error.message || 'Đăng ký thất bại';
       toast.error(message);
       return { success: false, error: message };
     }

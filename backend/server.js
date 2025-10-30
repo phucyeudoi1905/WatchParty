@@ -49,14 +49,25 @@ app.use(cors({
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+// Rate limiting (development-friendly defaults)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'GET' || req.path === '/health'
 });
-app.use(limiter);
+app.use(generalLimiter);
+
+// Dedicated limiter for auth endpoints to prevent brute force, yet friendly in dev
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth requests, please try again later', code: 'RATE_LIMITED' }
+});
+app.use('/api/auth', authLimiter);
 
 app.use(express.json({ 
   limit: '10mb',
@@ -213,7 +224,8 @@ io.on('connection', (socket) => {
         await room.updateVideoState(room.isPlaying, time);
       }
 
-      socket.to(roomId).emit('video-control', { action, time, userId });
+      // Broadcast chỉ tới client KHÁC và gắn senderId để client tự lọc
+      socket.broadcast.to(roomId).emit('video-control', { action, time, userId, senderId: socket.id });
       console.log(`🎮 Video control: ${action} at ${time}s in room ${roomId}`);
     } catch (err) {
       console.error('Video control error:', err.message);

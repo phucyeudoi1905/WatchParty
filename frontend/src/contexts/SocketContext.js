@@ -17,6 +17,7 @@ export const SocketProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [lastVideoEvent, setLastVideoEvent] = useState({ action: null, ts: 0, time: null });
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -125,14 +126,20 @@ export const SocketProvider = ({ children }) => {
 
   // Hàm điều khiển video
   const sendVideoControl = (roomId, action, time) => {
-    if (socket && isConnected) {
-      socket.emit('video-control', {
-        roomId,
-        action,
-        time,
-        userId: user._id
-      });
+    if (!socket || !isConnected) return;
+    const now = Date.now();
+    const sameAction = lastVideoEvent.action === action && Math.abs((lastVideoEvent.time ?? 0) - (time ?? 0)) < 0.25;
+    if (sameAction && (now - lastVideoEvent.ts) < 180) {
+      return;
     }
+    setLastVideoEvent({ action, ts: now, time });
+    socket.emit('video-control', {
+      roomId,
+      action,
+      time,
+      userId: user._id,
+      senderId: socket.id
+    });
   };
 
   // Yêu cầu đồng bộ trạng thái khi mới vào phòng
